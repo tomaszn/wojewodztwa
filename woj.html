@@ -59,7 +59,11 @@ var features = svg.append("g")
 //Create a tooltip, hidden at the start
 var tooltip = d3.select("body").append("div").attr("class","tooltip");
 
-d3.json("woj.topojson",function(error,geodata) {
+d3.queue()
+    .defer(d3.json, "woj.topojson")
+    .await(ready);
+
+function ready(error,geodata) {
   if (error) return console.log(error); //unknown error, check the console
 
   //Create a path for each map feature in the data
@@ -73,7 +77,7 @@ d3.json("woj.topojson",function(error,geodata) {
     .on("mouseout",hideTooltip)
     .on("click",clicked);
 
-});
+};
 
 // Add optional onClick events for features here
 // d.properties contains the attributes (e.g. d.properties.name, d.properties.population)
