@@ -9,7 +9,6 @@ body {
 path {
   stroke-width: 1px;
   stroke: #000000;
-  fill: #b51717;
   cursor: pointer;
 }
 
@@ -27,9 +26,14 @@ div.tooltip {
   display: none;
 }
 
+text.label {
+  text-shadow: 0px 0px 12px white;
+}
+
 </style>
 <body>
 <script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
 <script src="https://d3js.org/topojson.v2.min.js"></script>
 <script>
 
@@ -56,24 +60,90 @@ var svg = d3.select("body").append("svg")
 var features = svg.append("g")
     .attr("class","features");
 
+var labels = svg.append("g")
+    .attr("class","labels");
+
 //Create a tooltip, hidden at the start
 var tooltip = d3.select("body").append("div").attr("class","tooltip");
 
-d3.json("woj.topojson").then(function(geodata) {
+var color = d3.scaleThreshold()
+    .domain([108, 109, 110, 111])
+    .range(["#ffffcc","#c2e699","#78c679","#31a354","#006837"]);
+
+// A position encoding for the key only.
+var x = d3.scaleLinear()
+    .domain([107, 112])
+    .range([0, 200]);
+
+var xAxis = d3.axisBottom()
+    .scale(x)
+    .tickSize(13)
+    .tickValues(color.domain());
+
+var g = svg.append("g")
+    .attr("class", "key")
+    .attr("transform", "translate(300,20)");
+
+// kolorowe paski
+g.selectAll("rect")
+    .data(color.range().map(function(d, i) {
+      return {
+        x0: i ? x(color.domain()[i - 1]) : x.range()[0],
+        x1: i < color.domain().length ? x(color.domain()[i]) : x.range()[1],
+        z: d
+      };
+    }))
+  .enter().append("rect")
+    .attr("height", 8)
+    .attr("x", function(d) { return d.x0; })
+    .attr("width", function(d) { return d.x1 - d.x0; })
+    .style("fill", function(d) { return d.z; });
+
+g.call(xAxis).append("text")
+    .attr("class", "caption")
+    .attr("y", -6)
+    .style("fill", "black")
+    .text("AVG_FWQ");
+
+
+var datafile = d3.map();
+
+Promise.all([
+  d3.json("woj.topojson"),
+  d3.tsv("dane.csv", function(d) { datafile.set(d.WOJEWÓDZTWO, +d.AVG_FWQ); }),
+]).then(function(results) {
+
+  var geodata = results[0];
+
+  // Update color scale domain based on data
+  // color.domain([0, d3.max(features, d => d.properties.AVG_FWQ)]);
+
   //Create a path for each map feature in the data
   features.selectAll("path")
     .data(topojson.feature(geodata, geodata.objects.collection).features) //generate features from TopoJSON
     .enter()
     .append("path")
     .attr("d",path)
-    .on("mouseover",showTooltip)
-    .on("mousemove",moveTooltip)
-    .on("mouseout",hideTooltip)
+    // .on("mouseover",showTooltip)
+    // .on("mousemove",moveTooltip)
+    // .on("mouseout",hideTooltip)
+    .style("fill", fillFn)
     .on("click",clicked);
+
+  labels.selectAll("text")
+    .data(topojson.feature(geodata, geodata.objects.collection).features) //generate features from TopoJSON
+    .enter()
+    .append("text")
+      .attr("class", "label")
+      .attr("text-anchor","middle")
+      .attr("transform", function(d) { return "translate(" + path.centroid(d) + ")"; })
+      .text(nameFn);
+
 
 }).catch(function(error) {
   console.log(error); //unknown error, check the console
 });
+
 
 // Add optional onClick events for features here
 // d.properties contains the attributes (e.g. d.properties.name, d.properties.population)
@@ -81,6 +151,21 @@ function clicked(d,i) {
 
 }
 
+// Get province color
+function fillFn(d){
+  return color(datafile.get(nameFn(d)));
+}
+
+// Get province name
+function nameFn(d){
+  return d && d.properties ? d.properties.VARNAME_1.toLowerCase() : null;
+}
+
+// Get province name length
+function nameLength(d){
+  var n = nameFn(d);
+  return n ? n.length : 0;
+}
 
 //Position of the tooltip relative to the cursor
 var tooltipOffset = {x: 5, y: -25};
@@ -90,7 +175,7 @@ function showTooltip(d) {
   moveTooltip();
 
   tooltip.style("display","block")
-      .text(d.properties.VARNAME_1.toLowerCase());
+      .text(nameFn(d));
 }
 
 //Move the tooltip to track the mouse
